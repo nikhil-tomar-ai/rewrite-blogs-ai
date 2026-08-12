@@ -9,7 +9,7 @@ export class OllamaCloudProvider implements LLMProvider {
   defaultModel: string;
   private apiKey: string;
 
-  constructor(baseUrl = 'https://ollama.com/api', defaultModel = 'gemma4', apiKey = '') {
+  constructor(baseUrl = 'https://ollama.com/api', defaultModel = 'gemma3:27b-cloud', apiKey = '') {
     this.baseUrl = baseUrl.replace(/\/$/, '');
     this.defaultModel = defaultModel;
     this.apiKey = apiKey;
@@ -30,10 +30,11 @@ export class OllamaCloudProvider implements LLMProvider {
       return false;
     }
     try {
-      const res = await fetch(`${this.baseUrl}/version`, {
+      // Ollama Cloud /api/tags lists available cloud models — a quick connectivity check
+      const res = await fetch(`${this.baseUrl}/tags`, {
         method: 'GET',
         headers: this.getHeaders(),
-        signal: AbortSignal.timeout(2500)
+        signal: AbortSignal.timeout(4000)
       });
       return res.ok;
     } catch {
@@ -46,7 +47,7 @@ export class OllamaCloudProvider implements LLMProvider {
       const res = await fetch(`${this.baseUrl}/tags`, {
         method: 'GET',
         headers: this.getHeaders(),
-        signal: AbortSignal.timeout(3000)
+        signal: AbortSignal.timeout(5000)
       });
       if (!res.ok) {
         return [this.defaultModel];
@@ -64,20 +65,27 @@ export class OllamaCloudProvider implements LLMProvider {
 
   async generate(options: LLMGenerateOptions): Promise<LLMGenerateResult> {
     const model = options.model || this.defaultModel;
-    const url = `${this.baseUrl}/generate`;
+
+    // Ollama Cloud uses the /api/chat endpoint with OpenAI-style messages array
+    const url = `${this.baseUrl}/chat`;
+
+    const messages: Array<{ role: string; content: string }> = [];
+
+    if (options.systemInstruction) {
+      messages.push({ role: 'system', content: options.systemInstruction });
+    }
+
+    messages.push({ role: 'user', content: options.prompt });
 
     const payload: Record<string, any> = {
       model,
-      prompt: options.prompt,
+      messages,
       stream: false,
       options: {
         temperature: options.temperature ?? 0.7
       }
     };
 
-    if (options.systemInstruction) {
-      payload.system = options.systemInstruction;
-    }
     if (options.responseFormat === 'json') {
       payload.format = 'json';
     }
@@ -119,13 +127,22 @@ export class OllamaCloudProvider implements LLMProvider {
         method: 'POST',
         headers: this.getHeaders(),
         body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(90000)
+        signal: AbortSignal.timeout(120000) // 2-minute timeout for cloud model
       });
+
       if (!response.ok) {
         const errText = await response.text();
         throw new Error(`Ollama Cloud API error (${response.status}): ${errText}`);
       }
-      const data = (await response.json()) as { response?: string; eval_count?: number; usage?: { total_tokens?: number } };
+      const data = (await response.json()) as {
+        message?: { role?: string; content?: string };
+        response?: string;
+        eval_count?: number;
+        prompt_eval_count?: number;
+        usage?: { total_tokens?: number };
+      };
+
+      const text = data.message?.content || data.response || '';
 
       // Log full provider response to console for immediate visibility
       try {
@@ -141,8 +158,8 @@ export class OllamaCloudProvider implements LLMProvider {
           const arr = JSON.parse(existing || '[]');
           const last = arr[arr.length - 1];
           if (last && last.timestamp) {
-            last.response = data.response || null;
-            last.responseMeta = { eval_count: data.eval_count || 0, usage: data.usage || null };
+            last.response = text || null;
+            last.responseMeta = { eval_count: data.eval_count || 0, prompt_eval_count: data.prompt_eval_count || 0, usage: data.usage || null };
             await fs.writeFile(logFile, JSON.stringify(arr, null, 2), 'utf8');
           }
         } catch (e) {
@@ -153,10 +170,10 @@ export class OllamaCloudProvider implements LLMProvider {
       }
 
       return {
-        text: data.response || '',
+        text,
         model,
         provider: this.id,
-        tokensUsed: data.eval_count || data.usage?.total_tokens || 0
+        tokensUsed: (data.eval_count || 0) + (data.prompt_eval_count || 0)
       };
     } catch (err: any) {
       throw new Error(`Ollama Cloud Model execution failed: ${err.message}`);
