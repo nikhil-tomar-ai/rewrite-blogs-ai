@@ -1,0 +1,79 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    background-color: #FAF7F2; /* Warm creamy light background */
+    color: #341306; /* Rebel deep rich text */
+  }
+
+  h1, h2, h3, .font-serif {
+    font-family: 'Playfair Display', Georgia, serif;
+  }
+
+  code, pre, .font-mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+/* Custom Palette theme variables & utilities */
+:root {
+  --color-rebel: #341306;
+  --color-piper: #c96529;
+  --color-potters-clay: #945c3c;
+  --color-spicy-mix: #945444;
+}
+
+.bg-rebel {
+  background-color: #341306;
+}
+
+.text-rebel {
+  color: #341306;
+}
+
+.bg-piper {
+  background-color: #c96529;
+}
+
+.text-piper {
+  color: #c96529;
+}
+
+.border-piper {
+  border-color: #c96529;
+}
+
+.bg-potters-clay {
+  background-color: #945c3c;
+}
+
+.text-potters-clay {
+  color: #945c3c;
+}
+
+.bg-spicy-mix {
+  background-color: #945444;
+}
+
+.text-spicy-mix {
+  color: #945444;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #FAF7F2;
+}
+::-webkit-scrollbar-thumb {
+  background: #D9CBBA;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #c96529;
+}
+
+

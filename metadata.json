@@ -1,0 +1,6 @@
+{
+  "name": "SparkyAI Local Content Humanizer",
+  "description": "Open-source, local-first application to bulk humanize, critique, and transform CSV blog content using local LLMs.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
