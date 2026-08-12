@@ -37,4 +37,4 @@ ENV PORT=3000
 ENV LLM_PROVIDER=ollama
 ENV OLLAMA_BASE_URL=http://host.docker.internal:11434
 
-CMD ["node", "dist/server.cjs"]
+CMD ["node", "dist/server.mjs"]
