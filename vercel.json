@@ -23,12 +23,6 @@
       "dest": "/index.html"
     }
   ],
-  "env": {
-    "AI_PROVIDER": "ollama-cloud",
-    "OLLAMA_CLOUD_BASE_URL": "https://ollama.com/api",
-    "OLLAMA_CLOUD_MODEL": "gemma4",
-    "OLLAMA_CLOUD_API_KEY": "@ollama_cloud_api_key"
-  },
   "build": {
     "env": {
       "NODE_ENV": "production"
