@@ -1,4 +1,6 @@
 import { LLMProvider, LLMGenerateOptions, LLMGenerateResult } from './base.js';
+import fs from 'fs/promises';
+import path from 'path';
 
 export class OllamaProvider implements LLMProvider {
   id = 'ollama';
@@ -63,6 +65,37 @@ export class OllamaProvider implements LLMProvider {
     }
 
     try {
+      // Log outgoing payload and instructions for debugging/audit
+      try {
+        const logEntry = {
+          timestamp: new Date().toISOString(),
+          provider: this.id,
+          model,
+          url,
+          payload,
+          systemInstruction: options.systemInstruction || null,
+          promptPreview: typeof options.prompt === 'string' ? options.prompt.slice(0, 1024) : null
+        } as any;
+
+        const logFile = path.join(process.cwd(), 'storage', 'ollama_requests.json');
+        try {
+          await fs.mkdir(path.dirname(logFile), { recursive: true });
+          let arr: any[] = [];
+          try {
+            const existing = await fs.readFile(logFile, 'utf8');
+            arr = JSON.parse(existing || '[]');
+          } catch (e) {
+            arr = [];
+          }
+          arr.push(logEntry);
+          await fs.writeFile(logFile, JSON.stringify(arr, null, 2), 'utf8');
+        } catch (wfErr) {
+          // ignore
+        }
+      } catch (logErr) {
+        // ignore
+      }
+
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -76,6 +109,26 @@ export class OllamaProvider implements LLMProvider {
       }
 
       const data = await response.json() as { response?: string; eval_count?: number };
+
+      // Append response to last log entry for easier tracing
+      try {
+        const logFile = path.join(process.cwd(), 'storage', 'ollama_requests.json');
+        try {
+          const existing = await fs.readFile(logFile, 'utf8');
+          const arr = JSON.parse(existing || '[]');
+          const last = arr[arr.length - 1];
+          if (last && last.timestamp) {
+            last.response = data.response || null;
+            last.responseMeta = { eval_count: data.eval_count || 0 };
+            await fs.writeFile(logFile, JSON.stringify(arr, null, 2), 'utf8');
+          }
+        } catch (e) {
+          // ignore
+        }
+      } catch (e) {
+        // ignore
+      }
+
       return {
         text: data.response || '',
         model,

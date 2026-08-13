@@ -154,6 +154,34 @@ export function autoDetectColumns(headers: string[]): {
   };
 }
 
+const METADATA_COLUMN_PATTERNS = [
+  /^id$/i,
+  /url/i,
+  /website/i,
+  /date/i,
+  /status/i,
+  /count/i,
+  /^http/i,
+  /image/i,
+  /link/i,
+  /path/i,
+  /index$/i
+];
+
+/**
+ * Determines whether a CSV column header represents a text/narrative field
+ * suitable for AI humanization, as opposed to system/metadata fields (URLs, IDs, dates, counts, status codes).
+ */
+export function isTextColumn(headerName: string, sampleValue: string = ''): boolean {
+  if (!headerName) return false;
+  const name = headerName.trim();
+  const isMetaHeader = METADATA_COLUMN_PATTERNS.some(pat => pat.test(name));
+  if (isMetaHeader && sampleValue.length < 200) {
+    return false;
+  }
+  return true;
+}
+
 /**
  * Converts internal BlogRow list back into a CSV string using PapaParse,
  * preserving ALL original CSV columns in their exact original order.
