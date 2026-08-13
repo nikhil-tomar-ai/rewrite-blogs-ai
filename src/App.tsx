@@ -32,8 +32,22 @@ export default function App() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // App Core State
-  const [activeFileName, setActiveFileName] = useState<string | null>(null);
-  const [rows, setRows] = useState<BlogRow[]>([]);
+  const [activeFileName, setActiveFileName] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem('humanizer_active_file') || null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [rows, setRows] = useState<BlogRow[]>(() => {
+    try {
+      const saved = localStorage.getItem('humanizer_rows');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
   const [activeTab, setActiveTab] = useState<'data' | 'audit'>('data');
 
@@ -73,6 +87,16 @@ export default function App() {
 
   // Review Modal & Schema Validation Modal State
   const [reviewRow, setReviewRow] = useState<BlogRow | null>(null);
+
+  // Keep reviewRow in sync with the rows array so the DiffReviewModal
+  // always reflects the latest humanized content after a Full Re-Run.
+  useEffect(() => {
+    if (!reviewRow) return;
+    const updated = rows.find(r => r.id === reviewRow.id);
+    if (updated && updated !== reviewRow) {
+      setReviewRow(updated);
+    }
+  }, [rows]);
   const [isLocalAiModalOpen, setIsLocalAiModalOpen] = useState<boolean>(false);
   const [validationReport, setValidationReport] = useState<ValidationReport | null>(null);
   const [isSchemaModalOpen, setIsSchemaModalOpen] = useState<boolean>(false);
@@ -87,6 +111,8 @@ export default function App() {
     }
   });
 
+  const [isApprovingAll, setIsApprovingAll] = useState<boolean>(false);
+
   useEffect(() => {
     try {
       localStorage.setItem('humanizer_audit_checkpoint_logs', JSON.stringify(auditLogs));
@@ -94,6 +120,15 @@ export default function App() {
       console.warn('Could not save audit logs to localStorage:', e);
     }
   }, [auditLogs]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('humanizer_rows', JSON.stringify(rows));
+      if (activeFileName) localStorage.setItem('humanizer_active_file', activeFileName);
+    } catch (e) {
+      // ignore
+    }
+  }, [rows, activeFileName]);
 
   // Handle Loading Data into Workspace
   const handleLoadRows = (
@@ -138,6 +173,10 @@ export default function App() {
       targetColumns: targetCols && targetCols.length > 0 ? targetCols : ['*']
     }));
     setActiveTab('data');
+    // Scroll to top so the workspace controls are immediately visible
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    // Reset the file input so the same file can be re-selected
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   // Selection handlers
@@ -211,9 +250,38 @@ export default function App() {
     }
 
     const data = await response.json();
+
+    // Try multiple places for columnized output: explicit `humanizedColumns`, parsed provider JSON, or fallback
+    let humanizedCols: Record<string, string> | undefined = undefined;
+    if (data.humanizedColumns && Object.keys(data.humanizedColumns).length > 0) {
+      humanizedCols = data.humanizedColumns;
+    } else if (data.providerParsedResponse && data.providerParsedResponse.humanizedColumns && Object.keys(data.providerParsedResponse.humanizedColumns).length > 0) {
+      humanizedCols = data.providerParsedResponse.humanizedColumns;
+    } else if (data.providerParsedResponse && typeof data.providerParsedResponse === 'object' && Object.keys(data.providerParsedResponse).length > 0) {
+      // Sometimes the provider returns the columns object directly as the top-level parsed object
+      humanizedCols = data.providerParsedResponse as Record<string, string>;
+    }
+
+    // Prefer explicit 'humanized' text, else assemble from detected humanizedCols if present
+    const assembledText = data.humanized && typeof data.humanized === 'string' && data.humanized.trim().length > 0
+      ? data.humanized
+      : humanizedCols
+      ? Object.values(humanizedCols).join('\n\n')
+      : row.originalContent;
+
+    try {
+      console.debug('Humanize API response for row', row.id, {
+        humanized: data.humanized,
+        humanizedColumns: humanizedCols,
+        providerRaw: data.providerRawResponse || null
+      });
+    } catch (e) {
+      // ignore
+    }
+
     return {
-      humanizedText: data.humanized || row.originalContent,
-      humanizedColumns: data.humanizedColumns || {},
+      humanizedText: assembledText,
+      humanizedColumns: humanizedCols || {},
       criticResult: data.criticResult
     };
   };
@@ -294,6 +362,67 @@ export default function App() {
         return r;
       })
     );
+  };
+
+  // Approve all humanized rows in one action (global approve)
+  const handleApproveAll = async () => {
+    if (isApprovingAll) return;
+    setIsApprovingAll(true);
+    const now = new Date().toISOString();
+    const entries: AuditLogEntry[] = [];
+
+    try {
+      setRows(prev =>
+        prev.map(r => {
+          const hasHumanized =
+            (r.humanizedContent && r.humanizedContent.trim().length > 0) ||
+            (r.humanizedColumns && Object.keys(r.humanizedColumns).length > 0) ||
+            r.status === 'humanized' ||
+            r.status === 'edited';
+          if (!hasHumanized) return r;
+
+          const updatedText = r.humanizedContent && r.humanizedContent.trim().length > 0
+            ? r.humanizedContent
+            : (r.humanizedColumns && Object.keys(r.humanizedColumns).length > 0)
+            ? Object.values(r.humanizedColumns).join('\n\n')
+            : r.originalContent;
+          const wordCountAfter = updatedText.split(/\s+/).filter(Boolean).length;
+
+          // Prepare audit entry for approved row
+          entries.push({
+            id: `audit-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+            filename: activeFileName || 'workspace_data.csv',
+            rowIndex: r.originalIndex,
+            title: r.title,
+            originalContent: r.originalContent,
+            humanizedContent: updatedText,
+            tone: config.tone,
+            criticScore: r.criticResult?.score || 85,
+            timestamp: now,
+            tokensUsed: Math.round((r.wordCountOriginal + wordCountAfter) * 1.3)
+          });
+
+          return {
+            ...r,
+            humanizedContent: updatedText,
+            status: 'edited',
+            wordCountHumanized: wordCountAfter,
+            fleschScoreHumanized: calculateFleschScore(updatedText),
+            processedAt: now
+          };
+        })
+      );
+
+      if (entries.length > 0) {
+        setAuditLogs(prev => [...entries, ...prev]);
+        setTerminalLogs(prev => [
+          ...prev,
+          `[${new Date().toLocaleTimeString()}] Approve All: ${entries.length} rows approved.`
+        ]);
+      }
+    } finally {
+      setIsApprovingAll(false);
+    }
   };
 
   // Start Batch Processing Loop
@@ -473,9 +602,15 @@ export default function App() {
 
   // Reset Workspace
   const handleResetWorkspace = () => {
+    try {
+      localStorage.removeItem('humanizer_rows');
+      localStorage.removeItem('humanizer_active_file');
+    } catch { /* ignore */ }
     setRows([]);
     setActiveFileName(null);
     setSelectedRowIds(new Set());
+    // Reset the file input so the same file can be re-uploaded
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   return (
@@ -494,9 +629,11 @@ export default function App() {
         onExportCSV={handleExportCSV}
         onReset={handleResetWorkspace}
         onTriggerUploadClick={() => fileInputRef.current?.click()}
+        onApproveAll={handleApproveAll}
+        isApprovingAll={isApprovingAll}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
-        auditCount={auditLogs.length}
+      auditCount={auditLogs.length}
         onOpenLocalAiSettings={() => setIsLocalAiModalOpen(true)}
       />
 
@@ -507,70 +644,74 @@ export default function App() {
             logs={auditLogs}
             onClearLogs={() => setAuditLogs([])}
           />
-        ) : rows.length === 0 ? (
-          /* Empty State / Upload View */
-          <div className="max-w-4xl mx-auto py-8">
-            <div className="text-center mb-8">
-              <h1 className="text-3xl sm:text-4xl font-serif font-bold text-[#341306] tracking-tight mb-2">
-                Humanize & Rewrite Blog CSV Datasets
-              </h1>
-              <p className="text-sm text-[#945c3c] max-w-xl mx-auto leading-relaxed font-medium">
-                Upload your CSV file containing robotic or AI-generated blog drafts. Our Gemini Flash Agent rewrites content into natural, engaging, authentic human prose with an auto-critique verification loop.
-              </p>
-            </div>
-
-            <UploadSection
-              onLoadRows={handleLoadRows}
-              fileInputRef={fileInputRef}
-            />
-          </div>
         ) : (
-          /* Workspace Dashboard View */
-          <div>
-            {/* Top Workspace Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-4 bg-white p-3 rounded-2xl border border-[#E8DFD1] shadow-2xs">
-              <div className="flex items-center space-x-2 text-xs">
-                <span className="text-[#945c3c] font-medium">Active File:</span>
-                <span className="font-bold text-[#341306] bg-[#FAF7F2] px-3 py-1 rounded-full border border-[#E8DFD1]">
-                  {activeFileName}
-                </span>
-                <span className="text-[#945c3c] font-medium">({rows.length} total rows loaded)</span>
+          <>
+            {/* UploadSection is ALWAYS mounted so fileInputRef stays populated.
+                Visually hidden when rows are loaded — shown as the start/empty page. */}
+            <div className={rows.length === 0 ? 'max-w-4xl mx-auto py-8' : 'hidden'}>
+              <div className="text-center mb-8">
+                <h1 className="text-3xl sm:text-4xl font-serif font-bold text-[#341306] tracking-tight mb-2">
+                  Humanize &amp; Rewrite Blog CSV Datasets
+                </h1>
+                <p className="text-sm text-[#945c3c] max-w-xl mx-auto leading-relaxed font-medium">
+                  Upload your CSV file containing robotic or AI-generated blog drafts. Our AI Agent rewrites content into natural, engaging, authentic human prose with an auto-critique verification loop.
+                </p>
               </div>
-
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="text-xs text-[#c96529] hover:text-[#b3551d] font-bold uppercase tracking-wider underline"
-              >
-                Upload Different CSV
-              </button>
+              <UploadSection
+                onLoadRows={handleLoadRows}
+                fileInputRef={fileInputRef}
+              />
             </div>
 
-            {/* Metrics Dashboard Summary */}
-            <MetricsBar rows={rows} />
+            {/* Workspace Dashboard — shown when rows are loaded */}
+            {rows.length > 0 && (
+              <div>
+                {/* Top Workspace Bar */}
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-4 bg-white p-3 rounded-2xl border border-[#E8DFD1] shadow-2xs">
+                  <div className="flex items-center space-x-2 text-xs">
+                    <span className="text-[#945c3c] font-medium">Active File:</span>
+                    <span className="font-bold text-[#341306] bg-[#FAF7F2] px-3 py-1 rounded-full border border-[#E8DFD1]">
+                      {activeFileName}
+                    </span>
+                    <span className="text-[#945c3c] font-medium">({rows.length} total rows loaded)</span>
+                  </div>
 
-            {/* AI Editorial Directives & Config Panel */}
-            <ConfigPanel
-              config={config}
-              onChangeConfig={setConfig}
-              onStartBatch={handleStartBatch}
-              selectedCount={selectedRowIds.size}
-              totalCount={rows.length}
-              isProcessing={batchStats.isProcessing}
-              allHeaders={rows.length > 0 && rows[0].rawRecord ? Object.keys(rows[0].rawRecord) : []}
-            />
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="text-xs text-[#c96529] hover:text-[#b3551d] font-bold uppercase tracking-wider underline"
+                  >
+                    Upload Different CSV
+                  </button>
+                </div>
 
-            {/* CSV Interactive Data Table View */}
-            <DataTableView
-              rows={rows}
-              selectedRowIds={selectedRowIds}
-              onToggleSelectRow={handleToggleSelectRow}
-              onToggleSelectAll={handleToggleSelectAll}
-              onOpenDiffModal={row => setReviewRow(row)}
-              onSingleRowRewrite={handleSingleRowRewrite}
-              processingRowId={batchStats.currentProcessingId}
-              onInspectSchema={handleInspectSchema}
-            />
-          </div>
+                {/* Metrics Dashboard Summary */}
+                <MetricsBar rows={rows} />
+
+                {/* AI Editorial Directives & Config Panel */}
+                <ConfigPanel
+                  config={config}
+                  onChangeConfig={setConfig}
+                  onStartBatch={handleStartBatch}
+                  selectedCount={selectedRowIds.size}
+                  totalCount={rows.length}
+                  isProcessing={batchStats.isProcessing}
+                  allHeaders={rows.length > 0 && rows[0].rawRecord ? Object.keys(rows[0].rawRecord) : []}
+                />
+
+                {/* CSV Interactive Data Table View */}
+                <DataTableView
+                  rows={rows}
+                  selectedRowIds={selectedRowIds}
+                  onToggleSelectRow={handleToggleSelectRow}
+                  onToggleSelectAll={handleToggleSelectAll}
+                  onOpenDiffModal={row => setReviewRow(row)}
+                  onSingleRowRewrite={handleSingleRowRewrite}
+                  processingRowId={batchStats.currentProcessingId}
+                  onInspectSchema={handleInspectSchema}
+                />
+              </div>
+            )}
+          </>
         )}
       </main>
 
@@ -615,37 +756,7 @@ export default function App() {
         }}
       />
 
-      {/* Hidden File Input for uploading at any time */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".csv"
-        className="hidden"
-        onChange={e => {
-          if (e.target.files && e.target.files.length > 0) {
-            const file = e.target.files[0];
-            const reader = new FileReader();
-            reader.onload = ev => {
-              const text = ev.target?.result as string;
-              if (text) {
-                const parsed = parseCSVString(text);
-                if (parsed.length > 0) {
-                  const headers = Object.keys(parsed[0] || {});
-                  const detected = autoDetectColumns(headers);
-                  handleLoadRows(
-                    parsed,
-                    file.name,
-                    detected.contentColumn,
-                    detected.titleColumn,
-                    detected.authorColumn
-                  );
-                }
-              }
-            };
-            reader.readAsText(file);
-          }
-        }}
-      />
+      {/* File input is owned by UploadSection via fileInputRef — no duplicate needed here */}
     </div>
   );
 }

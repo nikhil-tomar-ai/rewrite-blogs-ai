@@ -1,5 +1,5 @@
 import React from 'react';
-import { FileSpreadsheet, Download, RotateCcw, Upload, FileCheck, ShieldCheck, Cpu } from 'lucide-react';
+import { FileSpreadsheet, Download, RotateCcw, Upload, FileCheck, ShieldCheck, Cpu, RefreshCw } from 'lucide-react';
 import { SAMPLE_DATASETS } from '../data/sampleBlogs';
 
 interface NavbarProps {
@@ -10,6 +10,8 @@ interface NavbarProps {
   onExportCSV: () => void;
   onReset: () => void;
   onTriggerUploadClick: () => void;
+  onApproveAll?: () => void;
+  isApprovingAll?: boolean;
   activeTab: 'data' | 'audit';
   setActiveTab: (tab: 'data' | 'audit') => void;
   auditCount: number;
@@ -24,6 +26,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onExportCSV,
   onReset,
   onTriggerUploadClick,
+  onApproveAll,
+  isApprovingAll,
   activeTab,
   setActiveTab,
   auditCount,
@@ -139,6 +143,21 @@ export const Navbar: React.FC<NavbarProps> = ({
               >
                 <Download className="w-4 h-4" />
                 <span className="hidden sm:inline">Export CSV</span>
+              </button>
+
+              <button
+                id="approve-all-top-btn"
+                onClick={onApproveAll}
+                disabled={isApprovingAll || !onApproveAll}
+                className={`px-4 py-2.5 bg-[#FAF7F2] hover:bg-[#F7F3EE] text-[#341306] rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all border border-[#E8DFD1] ${isApprovingAll ? 'opacity-60 cursor-wait' : ''}`}
+                title="Approve and save all humanized rows"
+              >
+                {isApprovingAll ? (
+                  <RefreshCw className="w-4 h-4 text-[#c96529] animate-spin" />
+                ) : (
+                  <FileCheck className="w-4 h-4 text-[#c96529]" />
+                )}
+                <span className="hidden sm:inline">{isApprovingAll ? 'Approving...' : 'Approve All'}</span>
               </button>
 
               <button

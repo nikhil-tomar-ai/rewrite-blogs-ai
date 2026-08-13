@@ -201,13 +201,14 @@ Return a valid JSON object with the key "humanizedColumns" containing a key-valu
       });
 
       let humanizedColumns: Record<string, string> = { ...columnsToRewrite };
+      let parsedProviderResponse = null;
       if (aiRes.text) {
-        const parsed = parseLLMJson(aiRes.text);
-        if (parsed) {
-          if (parsed.humanizedColumns && typeof parsed.humanizedColumns === 'object') {
-            humanizedColumns = parsed.humanizedColumns;
-          } else if (typeof parsed === 'object') {
-            humanizedColumns = parsed;
+        parsedProviderResponse = parseLLMJson(aiRes.text);
+        if (parsedProviderResponse) {
+          if (parsedProviderResponse.humanizedColumns && typeof parsedProviderResponse.humanizedColumns === 'object') {
+            humanizedColumns = parsedProviderResponse.humanizedColumns;
+          } else if (typeof parsedProviderResponse === 'object') {
+            humanizedColumns = parsedProviderResponse as Record<string, string>;
           }
         }
       }
@@ -215,16 +216,19 @@ Return a valid JSON object with the key "humanizedColumns" containing a key-valu
       const mainHumanizedText = Object.values(humanizedColumns).join('\n\n');
 
       res.json({
+        success: true,
         humanized: mainHumanizedText,
         humanizedColumns,
+        modelUsed: aiRes.model,
+        providerUsed: aiRes.provider,
+        providerRawResponse: aiRes.text || null,
+        providerParsedResponse: parsedProviderResponse,
         criticResult: {
           score: 90,
           feedback: 'All specified columns successfully rewritten locally.',
           isHumanEnough: true,
           turns: 1
-        },
-        modelUsed: aiRes.model,
-        providerUsed: aiRes.provider
+        }
       });
       return;
     }
@@ -253,7 +257,9 @@ Write the complete rewritten humanized blog post now. Output ONLY the rewritten 
       temperature: Number(temperature) || 0.7
     });
 
+    let parsedProviderResponse: any = null;
     let humanizedText = aiRes.text ? aiRes.text.trim() : content;
+    if (aiRes.text) parsedProviderResponse = parseLLMJson(aiRes.text);
     let criticResult = {
       score: 88,
       feedback: 'Passes natural human readability checks.',
@@ -286,6 +292,9 @@ Return JSON format: {"score": 88, "feedback": "Natural flow and varied sentence 
               turns: 1
             };
           }
+          // attach raw critic text for debugging
+          criticResult['rawCriticText'] = criticRes.text;
+          criticResult['parsedCritic'] = parsed || null;
         }
       } catch (criticErr) {
         // Silent critic catch
@@ -295,9 +304,11 @@ Return JSON format: {"score": 88, "feedback": "Natural flow and varied sentence 
     res.json({
       success: true,
       humanized: humanizedText,
-      criticResult,
       modelUsed: aiRes.model,
-      providerUsed: aiRes.provider
+      providerUsed: aiRes.provider,
+      providerRawResponse: aiRes.text || null,
+      providerParsedResponse,
+      criticResult
     });
   } catch (error: any) {
     console.error('API /api/humanize error:', error);
@@ -471,6 +482,43 @@ app.get('/api/jobs/:id/audit', (req: Request, res: Response) => {
     jobId: job.id,
     auditLogs: job.auditLogs || []
   });
+});
+
+// LLM Diagnostic Endpoint - checks provider availability and runs a small test prompt
+app.get('/api/llm/diagnose', async (_req: Request, res: Response) => {
+  try {
+    const manager = getLLMProviderManager();
+    const provider = manager.getProvider();
+
+    const available = await provider.isAvailable();
+    let models: string[] = [];
+    try {
+      models = (await provider.listModels()) || [];
+    } catch (e) {
+      models = [];
+    }
+
+    let sampleOutput: any = null;
+    try {
+      const testPrompt = 'Please respond with the single word: DIAG_OK';
+      const out = await provider.generate({ prompt: testPrompt, temperature: 0.0 });
+      sampleOutput = { text: out.text, model: out.model, provider: out.provider, tokensUsed: out.tokensUsed };
+    } catch (err: any) {
+      sampleOutput = { error: err.message || String(err) };
+    }
+
+    res.json({
+      providerName: provider.name,
+      providerId: (provider as any).id || 'unknown',
+      baseUrl: (provider as any).baseUrl || null,
+      defaultModel: (provider as any).defaultModel || null,
+      available,
+      models,
+      sampleOutput
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Diagnostic failed' });
+  }
 });
 
 async function startServer() {

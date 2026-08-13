@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Upload, FileSpreadsheet, Sparkles, ArrowRight, Table } from 'lucide-react';
 import { SAMPLE_DATASETS } from '../data/sampleBlogs';
 import { parseCSVString, autoDetectColumns } from '../utils/csvUtils';
@@ -153,8 +154,8 @@ export const UploadSection: React.FC<UploadSectionProps> = ({
         onChange={handleFileChange}
       />
 
-      {/* Column Mapping Modal / Overlay */}
-      {pendingParsedData && (
+      {/* Column Mapping Modal rendered via portal so it escapes any parent display:none */}
+      {pendingParsedData && createPortal(
         <div className="fixed inset-0 bg-[#341306]/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-[#FFFFFF] border border-[#E8DFD1] rounded-3xl max-w-lg w-full p-6 shadow-2xl text-[#341306]">
             <div className="flex items-center space-x-3 mb-4">
@@ -306,7 +307,8 @@ export const UploadSection: React.FC<UploadSectionProps> = ({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Primary Dropzone */}

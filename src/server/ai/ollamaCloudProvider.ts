@@ -1,4 +1,6 @@
 import { LLMProvider, LLMGenerateOptions, LLMGenerateResult } from './base.js';
+import fs from 'fs/promises';
+import path from 'path';
 
 export class OllamaCloudProvider implements LLMProvider {
   id = 'ollama-cloud';
@@ -81,6 +83,38 @@ export class OllamaCloudProvider implements LLMProvider {
     }
 
     try {
+      // Log outgoing payload for debugging
+      try {
+        const logEntry = {
+          timestamp: new Date().toISOString(),
+          provider: this.id,
+          model,
+          url,
+          payload,
+          systemInstruction: options.systemInstruction || null,
+          promptPreview: typeof options.prompt === 'string' ? options.prompt.slice(0, 1024) : null
+        } as any;
+        console.log('OLLAMA CLOUD REQUEST:', JSON.stringify(logEntry, null, 2));
+
+        const logFile = path.join(process.cwd(), 'storage', 'ollama_requests.json');
+        try {
+          await fs.mkdir(path.dirname(logFile), { recursive: true });
+          let arr: any[] = [];
+          try {
+            const existing = await fs.readFile(logFile, 'utf8');
+            arr = JSON.parse(existing || '[]');
+          } catch (e) {
+            arr = [];
+          }
+          arr.push(logEntry);
+          await fs.writeFile(logFile, JSON.stringify(arr, null, 2), 'utf8');
+        } catch (wfErr) {
+          console.error('Failed to write ollama request log:', wfErr);
+        }
+      } catch (logErr) {
+        console.error('OLLAMA CLOUD logging error:', logErr);
+      }
+
       const response = await fetch(url, {
         method: 'POST',
         headers: this.getHeaders(),
@@ -92,6 +126,32 @@ export class OllamaCloudProvider implements LLMProvider {
         throw new Error(`Ollama Cloud API error (${response.status}): ${errText}`);
       }
       const data = (await response.json()) as { response?: string; eval_count?: number; usage?: { total_tokens?: number } };
+
+      // Log full provider response to console for immediate visibility
+      try {
+        console.log('OLLAMA CLOUD RESPONSE:', JSON.stringify(data, null, 2));
+      } catch (e) {
+        // ignore
+      }
+
+      try {
+        const logFile = path.join(process.cwd(), 'storage', 'ollama_requests.json');
+        try {
+          const existing = await fs.readFile(logFile, 'utf8');
+          const arr = JSON.parse(existing || '[]');
+          const last = arr[arr.length - 1];
+          if (last && last.timestamp) {
+            last.response = data.response || null;
+            last.responseMeta = { eval_count: data.eval_count || 0, usage: data.usage || null };
+            await fs.writeFile(logFile, JSON.stringify(arr, null, 2), 'utf8');
+          }
+        } catch (e) {
+          // ignore
+        }
+      } catch (e) {
+        // ignore
+      }
+
       return {
         text: data.response || '',
         model,
