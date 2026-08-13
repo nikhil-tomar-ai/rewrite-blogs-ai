@@ -133,33 +133,14 @@ export class OllamaCloudProvider implements LLMProvider {
         const errText = await response.text();
         throw new Error(`Ollama Cloud API error (${response.status}): ${errText}`);
       }
+
       const data = (await response.json()) as {
         message?: { role?: string; content?: string };
-        response?: string;
         eval_count?: number;
         prompt_eval_count?: number;
-        usage?: { total_tokens?: number };
       };
 
-      const text = data.message?.content || data.response || '';
-
-      try {
-        const logFile = path.join(process.cwd(), 'storage', 'ollama_requests.json');
-        try {
-          const existing = await fs.readFile(logFile, 'utf8');
-          const arr = JSON.parse(existing || '[]');
-          const last = arr[arr.length - 1];
-          if (last && last.timestamp) {
-            last.response = text || null;
-            last.responseMeta = { eval_count: data.eval_count || 0, prompt_eval_count: data.prompt_eval_count || 0, usage: data.usage || null };
-            await fs.writeFile(logFile, JSON.stringify(arr, null, 2), 'utf8');
-          }
-        } catch (e) {
-          // ignore
-        }
-      } catch (e) {
-        // ignore
-      }
+      const text = data.message?.content || '';
 
       return {
         text,
