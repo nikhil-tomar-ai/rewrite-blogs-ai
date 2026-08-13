@@ -31,7 +31,7 @@ export const DiffReviewModal: React.FC<DiffReviewModalProps> = ({
     ? Object.keys(row.humanizedColumns)
     : [];
 
-  const [activeCol, setActiveCol] = useState<string>(rewrittenCols[0] || 'primary');
+  const [activeCol, setActiveCol] = useState<string>('primary');
   const [editedContent, setEditedContent] = useState<string>(row.humanizedContent || row.originalContent);
   const [editedColumns, setEditedColumns] = useState<Record<string, string>>(row.humanizedColumns || {});
   const [quickPrompt, setQuickPrompt] = useState<string>('');
@@ -41,11 +41,7 @@ export const DiffReviewModal: React.FC<DiffReviewModalProps> = ({
   React.useEffect(() => {
     setEditedContent(row.humanizedContent || row.originalContent);
     setEditedColumns(row.humanizedColumns || {});
-    if (row.humanizedColumns && Object.keys(row.humanizedColumns).length > 0) {
-      setActiveCol(Object.keys(row.humanizedColumns)[0]);
-    } else {
-      setActiveCol('primary');
-    }
+    setActiveCol('primary');
   }, [row]);
 
   const currentOriginalText = activeCol === 'primary' || !row.rawRecord?.[activeCol]
@@ -54,7 +50,9 @@ export const DiffReviewModal: React.FC<DiffReviewModalProps> = ({
 
   const currentEditedText = activeCol === 'primary'
     ? editedContent
-    : (editedColumns[activeCol] !== undefined ? editedColumns[activeCol] : (row.humanizedColumns?.[activeCol] || ''));
+    : (editedColumns[activeCol] !== undefined && editedColumns[activeCol].trim().length > 0
+        ? editedColumns[activeCol]
+        : (row.humanizedColumns?.[activeCol] || editedContent));
 
   const handleTextChange = (val: string) => {
     if (activeCol === 'primary') {
@@ -165,6 +163,16 @@ export const DiffReviewModal: React.FC<DiffReviewModalProps> = ({
         {rewrittenCols.length > 0 && (
           <div className="py-2 px-4 bg-[#FAF7F2]/60 border-b border-[#E8DFD1] flex flex-wrap items-center gap-2">
             <span className="text-xs font-bold text-[#945c3c] mr-2 uppercase tracking-wider">Select Column:</span>
+            <button
+              onClick={() => setActiveCol('primary')}
+              className={`px-3 py-1 text-xs font-bold rounded-full border transition-all ${
+                activeCol === 'primary'
+                  ? 'bg-[#c96529] text-white border-[#c96529] shadow-2xs'
+                  : 'bg-white text-[#945c3c] border-[#E8DFD1] hover:bg-[#FAF7F2]'
+              }`}
+            >
+              Primary Body Content
+            </button>
             {rewrittenCols.map(col => (
               <button
                 key={col}
@@ -178,16 +186,6 @@ export const DiffReviewModal: React.FC<DiffReviewModalProps> = ({
                 {col}
               </button>
             ))}
-            <button
-              onClick={() => setActiveCol('primary')}
-              className={`px-3 py-1 text-xs font-bold rounded-full border transition-all ${
-                activeCol === 'primary'
-                  ? 'bg-[#c96529] text-white border-[#c96529] shadow-2xs'
-                  : 'bg-white text-[#945c3c] border-[#E8DFD1] hover:bg-[#FAF7F2]'
-              }`}
-            >
-              Primary Body Content
-            </button>
           </div>
         )}
 

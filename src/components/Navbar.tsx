@@ -1,5 +1,5 @@
 import React from 'react';
-import { FileSpreadsheet, Download, RotateCcw, Upload, FileCheck, ShieldCheck, Cpu, RefreshCw } from 'lucide-react';
+import { FileSpreadsheet, Download, RotateCcw, Upload, FileCheck, ShieldCheck, Cpu, RefreshCw, FolderOpen } from 'lucide-react';
 import { SAMPLE_DATASETS } from '../data/sampleBlogs';
 
 interface NavbarProps {
@@ -34,17 +34,21 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenLocalAiSettings
 }) => {
   return (
-    <header id="app-navbar" className="bg-[#FFFDF9] border-b border-[#E8DFD1] text-[#341306] sticky top-0 z-30 shadow-xs">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+    <header id="app-navbar" className="bg-[#FFFDF9] border-b border-[#E8DFD1] text-[#341306] sticky top-0 z-30 shadow-xs w-full">
+      <div className="w-full px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
         
-        {/* Left branding */}
-        <div className="flex items-center space-x-3.5">
-          <div className="h-10 w-10 rounded-2xl bg-[#c96529] flex items-center justify-center shadow-md shadow-[#c96529]/20 border border-white">
+        {/* Left branding - Clickable to return to root CSV selection */}
+        <div
+          onClick={onReset}
+          className="flex items-center space-x-3.5 cursor-pointer group"
+          title="Return to Root CSV Selection Page"
+        >
+          <div className="h-10 w-10 rounded-2xl bg-[#c96529] flex items-center justify-center shadow-md shadow-[#c96529]/20 border border-white group-hover:scale-105 transition-transform">
             <span className="font-serif italic text-white text-xl font-bold">h</span>
           </div>
           <div>
             <div className="flex items-center space-x-2">
-              <h1 className="font-serif text-2xl font-bold tracking-tight text-[#341306]">sparky AI</h1>
+              <h1 className="font-serif text-2xl font-bold tracking-tight text-[#341306] group-hover:text-[#c96529] transition-colors">sparky AI</h1>
               <span className="px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest rounded-full bg-[#FAF7F2] text-[#945c3c] border border-[#E8DFD1] flex items-center gap-1.5 shadow-xs">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#c96529] animate-pulse" />
                 100% Local & Offline
@@ -95,6 +99,19 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Right Actions */}
         <div className="flex items-center space-x-2.5">
+          {/* Root CSV Selection Button */}
+          {totalRows > 0 && (
+            <button
+              id="root-csv-selection-btn"
+              onClick={onReset}
+              className="px-4 py-2.5 bg-[#FAF7F2] hover:bg-[#F2EAE0] border border-[#E8DFD1] text-[#341306] rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-2xs"
+              title="Go to Root CSV Selection & Upload Page"
+            >
+              <FolderOpen className="w-4 h-4 text-[#c96529]" />
+              <span className="hidden md:inline">Root CSV Selection</span>
+            </button>
+          )}
+
           {/* Local AI Settings Button */}
           {onOpenLocalAiSettings && (
             <button
@@ -164,7 +181,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 id="reset-workspace-btn"
                 onClick={onReset}
                 className="p-2 text-[#945c3c] hover:text-[#341306] hover:bg-[#FAF7F2] rounded-full transition-colors border border-[#E8DFD1]"
-                title="Clear current dataset"
+                title="Clear current dataset & return to Root CSV Selection"
               >
                 <RotateCcw className="w-4 h-4" />
               </button>

@@ -9,7 +9,7 @@ import { DiffReviewModal } from './components/DiffReviewModal';
 import { AuditLogView } from './components/AuditLogView';
 import { LocalAiSettingsModal } from './components/LocalAiSettingsModal';
 import { SchemaValidationModal } from './components/SchemaValidationModal';
-
+import { FolderOpen } from 'lucide-react';
 import {
   BlogRow,
   HumanizerConfig,
@@ -24,7 +24,8 @@ import {
   ValidationReport,
   triggerFileDownload,
   parseCSVString,
-  autoDetectColumns
+  autoDetectColumns,
+  isTextColumn
 } from './utils/csvUtils';
 import { SAMPLE_DATASETS } from './data/sampleBlogs';
 
@@ -213,13 +214,13 @@ export default function App() {
       columnsToRewrite = {};
       if (activeCfg.targetColumns.includes('*')) {
         Object.entries(row.rawRecord || {}).forEach(([k, v]) => {
-          if (v && v.trim().length > 0) {
+          if (v && v.trim().length > 0 && isTextColumn(k, v)) {
             columnsToRewrite![k] = v;
           }
         });
       } else {
         activeCfg.targetColumns.forEach(col => {
-          if (row.rawRecord && row.rawRecord[col] !== undefined) {
+          if (row.rawRecord && row.rawRecord[col] !== undefined && isTextColumn(col, row.rawRecord[col])) {
             columnsToRewrite![col] = row.rawRecord[col];
           }
         });
@@ -231,6 +232,7 @@ export default function App() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         content: row.originalContent,
+        contentColumn: activeCfg.contentColumn,
         columnsToRewrite: columnsToRewrite && Object.keys(columnsToRewrite).length > 0 ? columnsToRewrite : undefined,
         title: row.title,
         author: row.author,
@@ -637,8 +639,8 @@ export default function App() {
         onOpenLocalAiSettings={() => setIsLocalAiModalOpen(true)}
       />
 
-      {/* Main Workspace Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      {/* Main Workspace Container - Full Width */}
+      <main className="flex-1 w-full px-4 sm:px-6 lg:px-8 py-6">
         {activeTab === 'audit' ? (
           <AuditLogView
             logs={auditLogs}
@@ -648,7 +650,7 @@ export default function App() {
           <>
             {/* UploadSection is ALWAYS mounted so fileInputRef stays populated.
                 Visually hidden when rows are loaded — shown as the start/empty page. */}
-            <div className={rows.length === 0 ? 'max-w-4xl mx-auto py-8' : 'hidden'}>
+            <div className={rows.length === 0 ? 'w-full max-w-6xl mx-auto py-8' : 'hidden'}>
               <div className="text-center mb-8">
                 <h1 className="text-3xl sm:text-4xl font-serif font-bold text-[#341306] tracking-tight mb-2">
                   Humanize &amp; Rewrite Blog CSV Datasets
@@ -676,12 +678,23 @@ export default function App() {
                     <span className="text-[#945c3c] font-medium">({rows.length} total rows loaded)</span>
                   </div>
 
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    className="text-xs text-[#c96529] hover:text-[#b3551d] font-bold uppercase tracking-wider underline"
-                  >
-                    Upload Different CSV
-                  </button>
+                  <div className="flex items-center space-x-3">
+                    <button
+                      onClick={handleResetWorkspace}
+                      className="text-xs bg-[#FAF7F2] hover:bg-[#F2EAE0] text-[#c96529] hover:text-[#b3551d] px-3.5 py-1.5 rounded-full border border-[#E8DFD1] font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors shadow-2xs"
+                      title="Go back to Root CSV Selection & Upload Screen"
+                    >
+                      <FolderOpen className="w-3.5 h-3.5" />
+                      <span>Root CSV Selection</span>
+                    </button>
+
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      className="text-xs text-[#c96529] hover:text-[#b3551d] font-bold uppercase tracking-wider underline"
+                    >
+                      Upload Different CSV
+                    </button>
+                  </div>
                 </div>
 
                 {/* Metrics Dashboard Summary */}

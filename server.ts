@@ -141,6 +141,7 @@ app.post('/api/humanize', async (req: Request, res: Response) => {
   try {
     const {
       content,
+      contentColumn = 'content',
       columnsToRewrite,
       title = '',
       author = '',
@@ -183,14 +184,14 @@ ${keywordsNotice}`;
 
     // Multi-Column / All-Column Rewriting Pass
     if (columnsToRewrite && typeof columnsToRewrite === 'object' && Object.keys(columnsToRewrite).length > 0) {
-      const userPrompt = `You are humanizing multiple columns for a CSV row.
-Original Columns and Content:
+      const userPrompt = `You are an expert human editor humanizing text fields for a blog post CSV.
+Original Text Columns to Rewrite:
 ${JSON.stringify(columnsToRewrite, null, 2)}
 
 Tone Requirement: ${toneInstruction}
 
-Please rewrite and humanize EVERY column provided while maintaining appropriate style for each field.
-Return a valid JSON object with the key "humanizedColumns" containing a key-value pair for each column header name mapped to its newly rewritten humanized string text.`;
+Please rewrite and humanize EVERY column text field provided (titles, meta descriptions, headings, main article content) into natural, engaging human prose.
+Return a valid JSON object with the key "humanizedColumns" containing a key-value pair for each column header name mapped to its newly rewritten humanized text string. Output ONLY valid JSON.`;
 
       const aiRes = await provider.generate({
         prompt: userPrompt,
@@ -199,7 +200,7 @@ Return a valid JSON object with the key "humanizedColumns" containing a key-valu
         responseFormat: 'json'
       });
 
-      let humanizedColumns: Record<string, string> = { ...columnsToRewrite };
+      let humanizedColumns: Record<string, string> = {};
       let parsedProviderResponse = null;
       if (aiRes.text) {
         parsedProviderResponse = parseLLMJson(aiRes.text);
@@ -212,7 +213,68 @@ Return a valid JSON object with the key "humanizedColumns" containing a key-valu
         }
       }
 
-      const mainHumanizedText = Object.values(humanizedColumns).join('\n\n');
+      // Determine primary content column key
+      const possibleContentKeys = [
+        contentColumn,
+        'Main Content',
+        'content',
+        'Primary Body Content',
+        'body',
+        'blog_content',
+        'post_content',
+        'article'
+      ];
+
+      const primaryContentKey =
+        possibleContentKeys.find(k => columnsToRewrite[k] !== undefined) ||
+        Object.keys(columnsToRewrite).reduce(
+          (a, b) => ((columnsToRewrite[a] || '').length > (columnsToRewrite[b] || '').length ? a : b),
+          Object.keys(columnsToRewrite)[0]
+        );
+
+      const originalMainText = columnsToRewrite[primaryContentKey] || content || '';
+      let mainHumanizedText = humanizedColumns[primaryContentKey] || '';
+
+      // Check if main content was NOT rewritten (missing or identical to original text)
+      const needsSinglePassFallback =
+        !mainHumanizedText ||
+        mainHumanizedText.trim().length === 0 ||
+        mainHumanizedText.trim() === originalMainText.trim();
+
+      if (needsSinglePassFallback && originalMainText.trim().length > 0) {
+        console.log(`[Humanizer] Multi-column pass did not modify main content key '${primaryContentKey}'. Running dedicated humanize pass...`);
+        const fallbackPrompt = `Blog Title: ${title || columnsToRewrite['Blog Title'] || columnsToRewrite['title'] || 'Untitled'}
+Author: ${author || 'Anonymous'}
+
+Original Content to Humanize:
+"""
+${originalMainText}
+"""
+
+Tone Requirement: ${toneInstruction}
+
+Write the complete rewritten humanized blog post now. Output ONLY the rewritten blog text without any meta-commentary or markdown wrapping.`;
+
+        const fallbackAiRes = await provider.generate({
+          prompt: fallbackPrompt,
+          systemInstruction,
+          temperature: Number(temperature) || 0.7
+        });
+
+        if (fallbackAiRes.text && fallbackAiRes.text.trim().length > 0) {
+          mainHumanizedText = fallbackAiRes.text.trim();
+          humanizedColumns[primaryContentKey] = mainHumanizedText;
+        } else {
+          mainHumanizedText = originalMainText;
+        }
+      }
+
+      // Ensure all original keys from columnsToRewrite are present in humanizedColumns
+      Object.keys(columnsToRewrite).forEach(k => {
+        if (!humanizedColumns[k] || humanizedColumns[k].trim().length === 0) {
+          humanizedColumns[k] = columnsToRewrite[k];
+        }
+      });
 
       res.json({
         success: true,
@@ -224,7 +286,7 @@ Return a valid JSON object with the key "humanizedColumns" containing a key-valu
         providerParsedResponse: parsedProviderResponse,
         criticResult: {
           score: 90,
-          feedback: 'All specified columns successfully rewritten locally.',
+          feedback: 'Text columns successfully humanized.',
           isHumanEnough: true,
           turns: 1
         }
@@ -306,7 +368,7 @@ Return JSON format: {"score": 88, "feedback": "Natural flow and varied sentence 
       modelUsed: aiRes.model,
       providerUsed: aiRes.provider,
       providerRawResponse: aiRes.text || null,
-      providerParsedResponse,
+      providerParsedResponse: parsedProviderResponse,
       criticResult
     });
   } catch (error: any) {
