@@ -102,7 +102,6 @@ export class OllamaCloudProvider implements LLMProvider {
           systemInstruction: options.systemInstruction || null,
           promptPreview: typeof options.prompt === 'string' ? options.prompt.slice(0, 1024) : null
         } as any;
-        console.log('OLLAMA CLOUD REQUEST:', JSON.stringify(logEntry, null, 2));
 
         const logFile = path.join(process.cwd(), 'storage', 'ollama_requests.json');
         try {
@@ -117,10 +116,10 @@ export class OllamaCloudProvider implements LLMProvider {
           arr.push(logEntry);
           await fs.writeFile(logFile, JSON.stringify(arr, null, 2), 'utf8');
         } catch (wfErr) {
-          console.error('Failed to write ollama request log:', wfErr);
+          // ignore
         }
       } catch (logErr) {
-        console.error('OLLAMA CLOUD logging error:', logErr);
+        // ignore
       }
 
       const response = await fetch(url, {
@@ -143,13 +142,6 @@ export class OllamaCloudProvider implements LLMProvider {
       };
 
       const text = data.message?.content || data.response || '';
-
-      // Log full provider response to console for immediate visibility
-      try {
-        console.log('OLLAMA CLOUD RESPONSE:', JSON.stringify(data, null, 2));
-      } catch (e) {
-        // ignore
-      }
 
       try {
         const logFile = path.join(process.cwd(), 'storage', 'ollama_requests.json');

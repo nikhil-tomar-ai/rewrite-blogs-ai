@@ -271,16 +271,6 @@ export default function App() {
       ? Object.values(humanizedCols).join('\n\n')
       : row.originalContent;
 
-    try {
-      console.debug('Humanize API response for row', row.id, {
-        humanized: data.humanized,
-        humanizedColumns: humanizedCols,
-        providerRaw: data.providerRawResponse || null
-      });
-    } catch (e) {
-      // ignore
-    }
-
     return {
       humanizedText: assembledText,
       humanizedColumns: humanizedCols || {},
@@ -366,31 +356,41 @@ export default function App() {
     );
   };
 
-  // Approve all humanized rows in one action (global approve)
+  // Approve humanized version of all altered rows in one action (global approve)
   const handleApproveAll = async () => {
-    if (isApprovingAll) return;
+    if (isApprovingAll || rows.length === 0) return;
     setIsApprovingAll(true);
     const now = new Date().toISOString();
     const entries: AuditLogEntry[] = [];
 
     try {
+      const hasSelection = selectedRowIds.size > 0;
+
       setRows(prev =>
         prev.map(r => {
-          const hasHumanized =
+          // Check if row has an altered or humanized version
+          const hasHumanizedVersion =
             (r.humanizedContent && r.humanizedContent.trim().length > 0) ||
             (r.humanizedColumns && Object.keys(r.humanizedColumns).length > 0) ||
             r.status === 'humanized' ||
             r.status === 'edited';
-          if (!hasHumanized) return r;
 
-          const updatedText = r.humanizedContent && r.humanizedContent.trim().length > 0
-            ? r.humanizedContent
-            : (r.humanizedColumns && Object.keys(r.humanizedColumns).length > 0)
-            ? Object.values(r.humanizedColumns).join('\n\n')
-            : r.originalContent;
+          // Only approve rows that have humanized/altered versions
+          if (!hasHumanizedVersion) return r;
+
+          // If rows are explicitly selected via checkboxes, target selected altered rows
+          if (hasSelection && !selectedRowIds.has(r.id)) return r;
+
+          const updatedText =
+            (r.humanizedContent && r.humanizedContent.trim().length > 0)
+              ? r.humanizedContent
+              : (r.humanizedColumns && Object.keys(r.humanizedColumns).length > 0)
+              ? Object.values(r.humanizedColumns).join('\n\n')
+              : r.originalContent;
+
           const wordCountAfter = updatedText.split(/\s+/).filter(Boolean).length;
 
-          // Prepare audit entry for approved row
+          // Prepare audit log entry for approved humanized row
           entries.push({
             id: `audit-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
             filename: activeFileName || 'workspace_data.csv',
@@ -419,9 +419,21 @@ export default function App() {
         setAuditLogs(prev => [...entries, ...prev]);
         setTerminalLogs(prev => [
           ...prev,
-          `[${new Date().toLocaleTimeString()}] Approve All: ${entries.length} rows approved.`
+          `[${new Date().toLocaleTimeString()}] Approve All: Approved humanized version for ${entries.length} altered row(s).`
+        ]);
+        setSelectedRowIds(new Set());
+      } else {
+        setTerminalLogs(prev => [
+          ...prev,
+          `[${new Date().toLocaleTimeString()}] Approve All: No humanized or altered rows available to approve.`
         ]);
       }
+    } catch (err: any) {
+      console.error("Approve All Error:", err);
+      setTerminalLogs(prev => [
+        ...prev,
+        `[${new Date().toLocaleTimeString()}] Error in Approve All: ${err?.message || 'Failed'}`
+      ]);
     } finally {
       setIsApprovingAll(false);
     }
@@ -721,6 +733,8 @@ export default function App() {
                   onSingleRowRewrite={handleSingleRowRewrite}
                   processingRowId={batchStats.currentProcessingId}
                   onInspectSchema={handleInspectSchema}
+                  onApproveAll={handleApproveAll}
+                  isApprovingAll={isApprovingAll}
                 />
               </div>
             )}

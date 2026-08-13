@@ -10,7 +10,8 @@ import {
   Filter,
   CheckSquare,
   Square,
-  ShieldCheck
+  ShieldCheck,
+  FileCheck
 } from 'lucide-react';
 import { BlogRow } from '../types';
 
@@ -23,6 +24,8 @@ interface DataTableViewProps {
   onSingleRowRewrite: (row: BlogRow) => void;
   processingRowId: string | null;
   onInspectSchema?: () => void;
+  onApproveAll?: () => void;
+  isApprovingAll?: boolean;
 }
 
 export const DataTableView: React.FC<DataTableViewProps> = ({
@@ -33,7 +36,9 @@ export const DataTableView: React.FC<DataTableViewProps> = ({
   onOpenDiffModal,
   onSingleRowRewrite,
   processingRowId,
-  onInspectSchema
+  onInspectSchema,
+  onApproveAll,
+  isApprovingAll
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'humanized' | 'failed'>('all');
@@ -62,7 +67,7 @@ export const DataTableView: React.FC<DataTableViewProps> = ({
     <div className="bg-[#FFFFFF] border border-[#E8DFD1] rounded-[24px] overflow-hidden shadow-sm mb-8 text-[#341306]">
       {/* Table Header Controls */}
       <div className="p-4 border-b border-[#E8DFD1] bg-[#FAF7F2] flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center space-x-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
           <h3 className="font-serif text-lg font-bold text-[#341306]">CSV Blog Rows</h3>
           <span className="px-2.5 py-0.5 text-xs bg-white text-[#341306] rounded-full font-mono border border-[#E8DFD1] font-medium">
             {filteredRows.length} of {rows.length} rows
@@ -75,6 +80,25 @@ export const DataTableView: React.FC<DataTableViewProps> = ({
             >
               <ShieldCheck className="w-3.5 h-3.5 text-[#c96529]" />
               <span className="hidden sm:inline">100% Schema Preserved</span>
+            </button>
+          )}
+
+          {onApproveAll && rows.length > 0 && (
+            <button
+              id="table-approve-all-btn"
+              onClick={onApproveAll}
+              disabled={isApprovingAll}
+              className={`px-3 py-1 text-[10px] bg-[#FAF7F2] hover:bg-[#c96529] text-[#945c3c] hover:text-white border border-[#E8DFD1] rounded-full font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors shadow-2xs ${
+                isApprovingAll ? 'opacity-60 cursor-wait' : ''
+              }`}
+              title="Approve and save humanized / selected rows"
+            >
+              {isApprovingAll ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#c96529]" />
+              ) : (
+                <FileCheck className="w-3.5 h-3.5 text-[#c96529]" />
+              )}
+              <span>{isApprovingAll ? 'Approving...' : selectedRowIds.size > 0 ? `Approve Selected (${selectedRowIds.size})` : 'Approve All'}</span>
             </button>
           )}
         </div>

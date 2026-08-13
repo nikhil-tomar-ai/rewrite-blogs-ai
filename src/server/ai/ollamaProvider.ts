@@ -76,7 +76,6 @@ export class OllamaProvider implements LLMProvider {
           systemInstruction: options.systemInstruction || null,
           promptPreview: typeof options.prompt === 'string' ? options.prompt.slice(0, 1024) : null
         } as any;
-        console.log('OLLAMA REQUEST:', JSON.stringify(logEntry, null, 2));
 
         const logFile = path.join(process.cwd(), 'storage', 'ollama_requests.json');
         try {
@@ -91,10 +90,10 @@ export class OllamaProvider implements LLMProvider {
           arr.push(logEntry);
           await fs.writeFile(logFile, JSON.stringify(arr, null, 2), 'utf8');
         } catch (wfErr) {
-          console.error('Failed to write ollama request log:', wfErr);
+          // ignore
         }
       } catch (logErr) {
-        console.error('OLLAMA logging error:', logErr);
+        // ignore
       }
 
       const response = await fetch(url, {
@@ -110,13 +109,6 @@ export class OllamaProvider implements LLMProvider {
       }
 
       const data = await response.json() as { response?: string; eval_count?: number };
-
-      // Log full provider response to console for immediate visibility
-      try {
-        console.log('OLLAMA RESPONSE:', JSON.stringify(data, null, 2));
-      } catch (e) {
-        // ignore
-      }
 
       // Append response to last log entry for easier tracing
       try {

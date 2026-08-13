@@ -242,7 +242,6 @@ Return a valid JSON object with the key "humanizedColumns" containing a key-valu
         mainHumanizedText.trim() === originalMainText.trim();
 
       if (needsSinglePassFallback && originalMainText.trim().length > 0) {
-        console.log(`[Humanizer] Multi-column pass did not modify main content key '${primaryContentKey}'. Running dedicated humanize pass...`);
         const fallbackPrompt = `Blog Title: ${title || columnsToRewrite['Blog Title'] || columnsToRewrite['title'] || 'Untitled'}
 Author: ${author || 'Anonymous'}
 
