@@ -1,0 +1,144 @@
+// Prisma Schema for AI-Powered CSV Blog Humanization Platform
+// Supports SQLite for local single-file storage and easily migrates to PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ------------------------------------------------------
+// 1. DATASET: Represents an uploaded CSV file and metadata
+// ------------------------------------------------------
+model Dataset {
+  id               String          @id @default(cuid())
+  fileName         String          // Storage filename
+  originalFileName String          // Original filename provided by user
+  fileSize         Int             // Size in bytes
+  totalRows        Int             @default(0)
+  totalColumns     Int             @default(0)
+  columnsJson      String          // Serialized ColumnAnalysis[] metadata
+  status           String          @default("UPLOADED") // UPLOADED, ANALYZING, READY, PROCESSING, COMPLETED, PARTIALLY_COMPLETED, FAILED
+  errorMessage     String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  // Relationships
+  jobs             ProcessingJob[]
+  rows             ProcessingRow[]
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ------------------------------------------------------
+// 2. PROCESSING CONFIGURATION: Settings for AI transformation
+// ------------------------------------------------------
+model ProcessingConfiguration {
+  id                     String   @id @default(cuid())
+  jobId                  String?  @unique
+  provider               String   @default("ollama") // ollama, openai, gemini, anthropic
+  model                  String   @default("llama3.1:8b")
+  humanizationLevel      String   @default("medium") // light, medium, strong
+  expansionLevel         String   @default("none")   // none, low, medium, high
+  writingStyle           String   @default("casual") // casual, conversational, thought_leader, storyteller, punchy, sarcastic, academic, custom
+  selectedColumnsJson    String   // JSON string array of column names selected for processing
+  contentTypeMapJson     String?  // JSON mapping of column -> contentType (title, main_content, faq, etc.)
+  customInstructions     String?  // Additional editorial directives
+  preserveKeywordsJson   String?  // Array of keywords to preserve verbatim
+  batchSize              Int      @default(10)
+  maxRetries             Int      @default(3)
+  temperature            Float    @default(0.7)
+  updateWordCount        Boolean  @default(false)
+  placeholderProtection  Boolean  @default(true)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  job                    ProcessingJob? @relation(fields: [jobId], references: [id], onDelete: Cascade)
+}
+
+// ------------------------------------------------------
+// 3. PROCESSING JOB: Batch execution tracking instance
+// ------------------------------------------------------
+model ProcessingJob {
+  id              String                   @id @default(cuid())
+  datasetId       String
+  status          String                   @default("CREATED") // CREATED, RUNNING, PAUSED, COMPLETED, FAILED, CANCELLED
+  totalRows       Int                      @default(0)
+  completedRows   Int                      @default(0)
+  successfulRows  Int                      @default(0)
+  failedRows      Int                      @default(0)
+  currentBatch    Int                      @default(0)
+  totalBatches    Int                      @default(0)
+  errorMessage    String?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+
+  // Relationships
+  dataset         Dataset                  @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+  configuration   ProcessingConfiguration?
+  rows            ProcessingRow[]
+
+  @@index([datasetId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ------------------------------------------------------
+// 4. PROCESSING ROW: Row-level state and dual value storage
+// ------------------------------------------------------
+model ProcessingRow {
+  id                   String        @id @default(cuid())
+  datasetId            String
+  jobId                String?
+  rowNumber            Int           // 0-indexed row position in original CSV
+  originalDataJson     String        // Complete unmodified original row record as JSON
+  transformedDataJson  String?       // Transformed row record as JSON (only selected fields altered)
+  status               String        @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED, SKIPPED
+  errorMessage         String?
+  retryCount           Int           @default(0)
+  modelUsed            String?
+  providerUsed         String?
+  originalWordCount    Int           @default(0)
+  transformedWordCount Int           @default(0)
+  wordCountDiff        Int           @default(0)
+  processingTimeMs     Int           @default(0)
+  criticScore          Int?          // 0-100 authenticity score
+  criticFeedback       String?
+  startedAt            DateTime?
+  completedAt          DateTime?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  // Relationships
+  dataset              Dataset       @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+  job                  ProcessingJob? @relation(fields: [jobId], references: [id], onDelete: SetNull)
+
+  @@unique([datasetId, rowNumber])
+  @@index([datasetId])
+  @@index([jobId])
+  @@index([status])
+}
+
+// ------------------------------------------------------
+// 5. AI PROVIDER: Provider registration and health state
+// ------------------------------------------------------
+model AIProviderRecord {
+  id              String    @id @default(cuid())
+  name            String
+  providerType    String    // ollama, openai, gemini, anthropic
+  baseUrl         String
+  defaultModel    String
+  availableModels String?   // JSON array of strings
+  isAvailable     Boolean   @default(false)
+  lastHealthCheck DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([providerType, baseUrl])
+}

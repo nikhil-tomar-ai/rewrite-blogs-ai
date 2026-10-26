@@ -1,0 +1,6 @@
+{
+  "name": "SparkyAI Local Content Humanizer",
+  "description": "Open-source, local-first application to humanize entire documents (.docx, .md, .txt) and bulk CSV blog datasets using local LLMs.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Inter', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    background-color: #f9fafb;
+    color: #111827;
+  }
+
+  .dark body {
+    background-color: #0d0f12;
+    color: #f3f4f6;
+  }
+
+  code, pre, .font-mono {
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Accessible focus rings */
+  :focus-visible {
+    outline: 2px solid #6366f1;
+    outline-offset: 2px;
+  }
+}
+
+/* Modern subtle scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(156, 163, 175, 0.4);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(107, 114, 128, 0.7);
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(75, 85, 99, 0.4);
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(107, 114, 128, 0.7);
+}
+
+/* Backward compatibility variables for any legacy palette references */
+:root {
+  --color-rebel: #111827;
+  --color-piper: #4f46e5;
+  --color-potters-clay: #4b5563;
+  --color-spicy-mix: #6b7280;
+}
+.bg-rebel { background-color: #111827; }
+.text-rebel { color: #111827; }
+.bg-piper { background-color: #4f46e5; }
+.text-piper { color: #4f46e5; }
+.border-piper { border-color: #4f46e5; }
+.bg-potters-clay { background-color: #4b5563; }
+.text-potters-clay { color: #4b5563; }
+.bg-spicy-mix { background-color: #6b7280; }
+.text-spicy-mix { color: #6b7280; }
+
+
